@@ -20,7 +20,19 @@ Requirements: Node.js 20 or later and npm.
 
 The React development server proxies `/api` and `/uploads` to the Express API on port 4000. SQLite data and the generated local JWT secret are stored in `data/`; uploaded media is stored in `uploads/`. Both directories are ignored by Git. The local `.env` containing the admin password hash is also ignored by Git. Do not use the example values as production secrets.
 
-For a production-style local run, set `CLIENT_ORIGIN` to the deployed frontend origin, run `npm run build`, then run `npm start`. Express serves the built frontend from `dist/`. Put the app behind HTTPS and configure a persistent disk or object storage for the SQLite database and uploaded media before deployment.
+For a production-style local run, run `npm run build`, then run `npm start`; Express serves the built frontend from `dist/`. Set `CLIENT_ORIGIN` only when a separate frontend origin needs to call the API. For hosting, put the app behind HTTPS and configure persistent storage for the SQLite database and uploaded media.
+
+## Hosting on Render
+
+The repository includes a [`render.yaml`](./render.yaml) Blueprint for a single Render Web Service. It builds the Vite frontend, serves it and the Express API from the same Node process, checks `/api/health`, generates a JWT secret, and mounts a persistent disk at `/var/data`. SQLite files and uploaded media are stored under that mount so they survive deploys and restarts.
+
+1. Push this repository to GitHub and create a new Blueprint in Render from the repository. Review the service and disk settings in `render.yaml` and deploy.
+2. Wait for the health check to pass, then open the `onrender.com` service URL. Because the frontend and API share one origin, no `CLIENT_ORIGIN` value is needed for the normal website.
+3. In the service environment, set `SUPERADMIN_EMAIL`, `SUPERADMIN_NAME`, and `SUPERADMIN_PASSWORD_HASH` to provision the administrator. Generate the bcrypt hash using the command in the local setup section; do not store a plaintext password in environment variables.
+4. Add and verify a custom domain in Render if desired. Keep the service on a plan that supports persistent disks; the database and uploads must remain on persistent storage.
+5. Back up `/var/data` regularly. The application currently uses a local SQLite database and local uploads, so run one service instance only; do not scale this deployment horizontally or move it to ephemeral storage. Plan a backup and restore before migrating or replacing the disk.
+
+If an external website or separate frontend must call this API, set `CLIENT_ORIGIN` to its exact origin (or a comma-separated list of exact origins). The server ignores unlisted browser origins. Do not use `*` for authenticated API access.
 
 ## Implemented workflows
 

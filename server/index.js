@@ -205,7 +205,16 @@ if (fs.existsSync(adminSetupPath)) {
 
 const app = express();
 app.disable('x-powered-by');
-app.use(cors({ origin: process.env.CLIENT_ORIGIN?.split(',') ?? 'http://localhost:5173' }));
+if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
+const clientOrigins = (process.env.CLIENT_ORIGIN || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5173'))
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+app.use(cors({
+  origin(origin, callback) {
+    callback(null, !origin || clientOrigins.includes(origin));
+  },
+}));
 app.use(express.json({ limit: '1mb' }));
 app.use('/uploads', express.static(uploadDir, { dotfiles: 'deny', index: false, maxAge: '1d' }));
 app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 40, standardHeaders: 'draft-7', legacyHeaders: false }));
