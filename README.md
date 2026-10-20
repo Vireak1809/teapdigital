@@ -28,6 +28,13 @@ For a production-style local run, set `CLIENT_ORIGIN` to the deployed frontend o
 - Owner-isolated wedding creation, editing, draft/publish status, customizable template selection, and public invitation pages.
 - Per-guest invitation links with private RSVP tokens and party-size limits; guest status, check-in, CSV import, and CSV export.
 - Authenticated image, video, and audio uploads with file-type and 25 MB limits.
+- A Khmer Heritage invitation template with Khmer-language welcome, invitation, wedding-details, and RSVP copy.
+- Shared entrance, scroll-reveal, hover, focus, gallery, card, and RSVP animations across the invitation templates; these respect reduced-motion preferences and leave content visible if scroll observation is unavailable.
+- An Angkor Royal Cambodian wedding template with Khmer-first copy, a live countdown, editable love-story timeline with photos, customizable ceremony schedule, photo lightbox, venue map, Telegram/Facebook sharing, printable invitation, gift details, organizer contacts, and its own Khmer-themed animation treatment.
+- A selectable, publishable Khmer Ceremonial design in the studio, using saved wedding names, date, venue, uploaded gallery/payment QR, ceremony schedule, and the platform's invited-guest RSVP flow. Studio previews and the [`public/templates/khmer-ceremonial.html`](./public/templates/khmer-ceremonial.html) shortcut open this design with the signed-in owner's last selected wedding, without changing its saved template. When opened without a signed-in Studio session, the HTML file displays its editable standalone sample.
+- A separate Khmer Ceremonial Gold template inspired by the full single-file Khmer ceremonial design, with an animated invitation-door cover, Khmer/English labels, framed couple profiles, countdown, love-story timeline, editable ceremony program, venue/map, gallery lightbox, guest-specific RSVP, guest wishes, payment QR, and sharing QR. The existing Khmer Ceremonial template remains available separately.
+- Optional welcome video, looping background music, and payment QR image assignments from uploaded media. The welcome video plays muted before the welcome screen; music starts when the video ends, with the invitation's music button available to play or pause it. Browser autoplay restrictions may require a guest to start music manually.
+- Khmer RSVP collection includes phone and meal preference; each guest's RSVP is updated on resubmission and appears in the organizer guest list and CSV export.
 - Downloadable QR codes for a published invitation, plus copy-link, WhatsApp, and email sharing links.
 - Separate administrator navigation and server-authorized account status management.
 - Responsive public invitation and dashboard layouts.

@@ -107,7 +107,13 @@ db.exec(`
     venue TEXT NOT NULL DEFAULT '', address TEXT NOT NULL DEFAULT '', maps_url TEXT NOT NULL DEFAULT '',
     story TEXT NOT NULL DEFAULT '', published INTEGER NOT NULL DEFAULT 0,
     template TEXT NOT NULL DEFAULT 'The Botanica', primary_color TEXT NOT NULL DEFAULT '#9a7359',
-    media TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    media TEXT NOT NULL DEFAULT '[]', payment_qr_media_id TEXT NOT NULL DEFAULT '',
+    welcome_video_media_id TEXT NOT NULL DEFAULT '', music_media_id TEXT NOT NULL DEFAULT '',
+    ceremony_schedule TEXT NOT NULL DEFAULT '[]', love_timeline TEXT NOT NULL DEFAULT '[]',
+    parking_info TEXT NOT NULL DEFAULT '',
+    contact_phone TEXT NOT NULL DEFAULT '', contact_telegram TEXT NOT NULL DEFAULT '',
+    gift_payment_info TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
   CREATE TABLE IF NOT EXISTS guests (
     id INTEGER PRIMARY KEY AUTOINCREMENT, wedding_id INTEGER NOT NULL REFERENCES weddings(id) ON DELETE CASCADE,
@@ -120,11 +126,33 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS rsvps (
     id INTEGER PRIMARY KEY AUTOINCREMENT, wedding_id INTEGER NOT NULL REFERENCES weddings(id) ON DELETE CASCADE,
     name TEXT NOT NULL, email TEXT NOT NULL DEFAULT '', attending INTEGER NOT NULL,
-    attendees INTEGER NOT NULL DEFAULT 1, message TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    attendees INTEGER NOT NULL DEFAULT 1, message TEXT NOT NULL DEFAULT '',
+    guest_id INTEGER, phone TEXT NOT NULL DEFAULT '', meal_preference TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
   CREATE INDEX IF NOT EXISTS idx_weddings_owner ON weddings(owner_id);
   CREATE INDEX IF NOT EXISTS idx_guests_wedding ON guests(wedding_id);
 `);
+const weddingColumns = db.prepare('PRAGMA table_info(weddings)').all().map((column) => column.name);
+const weddingColumnDefaults = {
+  payment_qr_media_id: "TEXT NOT NULL DEFAULT ''",
+  welcome_video_media_id: "TEXT NOT NULL DEFAULT ''",
+  music_media_id: "TEXT NOT NULL DEFAULT ''",
+  ceremony_schedule: "TEXT NOT NULL DEFAULT '[]'",
+  love_timeline: "TEXT NOT NULL DEFAULT '[]'",
+  parking_info: "TEXT NOT NULL DEFAULT ''",
+  contact_phone: "TEXT NOT NULL DEFAULT ''",
+  contact_telegram: "TEXT NOT NULL DEFAULT ''",
+  gift_payment_info: "TEXT NOT NULL DEFAULT ''",
+};
+for (const [column, definition] of Object.entries(weddingColumnDefaults)) {
+  if (!weddingColumns.includes(column)) db.exec(`ALTER TABLE weddings ADD COLUMN ${column} ${definition}`);
+}
+const rsvpColumns = db.prepare('PRAGMA table_info(rsvps)').all().map((column) => column.name);
+for (const column of ['guest_id', 'phone', 'meal_preference']) {
+  if (!rsvpColumns.includes(column)) db.exec(`ALTER TABLE rsvps ADD COLUMN ${column} ${column === 'guest_id' ? 'INTEGER' : "TEXT NOT NULL DEFAULT ''"}`);
+}
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_rsvps_guest ON rsvps(guest_id) WHERE guest_id IS NOT NULL');
 const guestColumns = db.prepare('PRAGMA table_info(guests)').all().map((column) => column.name);
 if (!guestColumns.includes('invitation_token')) db.exec('ALTER TABLE guests ADD COLUMN invitation_token TEXT');
 const updateInvitationToken = db.prepare('UPDATE guests SET invitation_token = ? WHERE id = ?');
@@ -188,7 +216,24 @@ const signupSchema = z.object({
   email: z.string().trim().email().max(254),
   password: z.string().min(10).max(128),
 });
-const weddingFields = ['title', 'bride', 'groom', 'wedding_date', 'venue', 'address', 'maps_url', 'story', 'template', 'primary_color'];
+const weddingFields = [
+  'title', 'bride', 'groom', 'wedding_date', 'venue', 'address', 'maps_url', 'story',
+  'template', 'primary_color', 'payment_qr_media_id', 'welcome_video_media_id', 'music_media_id',
+  'ceremony_schedule', 'love_timeline', 'parking_info', 'contact_phone', 'contact_telegram', 'gift_payment_info',
+];
+const ceremonyScheduleSchema = z.array(z.object({
+  name: z.string().trim().min(1).max(120),
+  date: z.string().trim().max(30).optional().default(''),
+  time: z.string().trim().max(30).optional().default(''),
+  description: z.string().trim().max(500).optional().default(''),
+  location: z.string().trim().max(200).optional().default(''),
+})).max(20);
+const loveTimelineSchema = z.array(z.object({
+  title: z.string().trim().min(1).max(120),
+  date: z.string().trim().max(30).optional().default(''),
+  description: z.string().trim().max(500).optional().default(''),
+  photo_media_id: z.string().trim().max(100).optional().default(''),
+})).max(20);
 
 function safeUser(user) {
   return { id: user.id, name: user.name, email: user.email, role: user.role, status: user.status };
@@ -230,7 +275,13 @@ function weddingForOwner(req, res, next) {
   next();
 }
 function serializeWedding(wedding) {
-  return { ...wedding, published: Boolean(wedding.published), media: JSON.parse(wedding.media || '[]') };
+  return {
+    ...wedding,
+    published: Boolean(wedding.published),
+    media: JSON.parse(wedding.media || '[]'),
+    ceremony_schedule: JSON.parse(wedding.ceremony_schedule || '[]'),
+    love_timeline: JSON.parse(wedding.love_timeline || '[]'),
+  };
 }
 function slugify(value) {
   return value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 42) || 'our-wedding';
@@ -277,7 +328,27 @@ app.post('/api/weddings', auth(), (req, res) => {
 });
 app.put('/api/weddings/:id', auth(), weddingForOwner, (req, res) => {
   const updates = {};
-  for (const field of weddingFields) if (Object.hasOwn(req.body, field)) updates[field] = z.string().trim().max(field === 'story' ? 5000 : 500).parse(req.body[field]);
+  for (const field of weddingFields) {
+    if (!Object.hasOwn(req.body, field)) continue;
+    const maxLength = field === 'story' || field === 'gift_payment_info' ? 5000 : ['ceremony_schedule', 'love_timeline'].includes(field) ? 12000 : 500;
+    const value = z.string().trim().max(maxLength).parse(req.body[field]);
+    if (field === 'ceremony_schedule' || field === 'love_timeline') {
+      let schedule;
+      try { schedule = JSON.parse(value); } catch { throw new z.ZodError([{ code: 'custom', path: [field], message: `${field === 'ceremony_schedule' ? 'Ceremony schedule' : 'Love timeline'} must be valid JSON.` }]); }
+      const parsedSchedule = (field === 'ceremony_schedule' ? ceremonyScheduleSchema : loveTimelineSchema).parse(schedule);
+      if (field === 'love_timeline') {
+        const media = JSON.parse(req.wedding.media || '[]');
+        if (parsedSchedule.some((milestone) => milestone.photo_media_id && !media.some((item) => item.id === milestone.photo_media_id && item.type === 'image'))) {
+          throw new z.ZodError([{ code: 'custom', path: [field], message: 'Timeline photos must be images uploaded to this wedding.' }]);
+        }
+      }
+      updates[field] = JSON.stringify(parsedSchedule);
+    } else if ((field === 'maps_url' || field === 'contact_telegram') && value) {
+      updates[field] = z.string().url().refine((url) => /^https?:\/\//i.test(url), 'Please enter a valid HTTP or HTTPS link.').parse(value);
+    } else {
+      updates[field] = value;
+    }
+  }
   if (Object.hasOwn(req.body, 'published')) updates.published = z.boolean().parse(req.body.published) ? 1 : 0;
   if (!Object.keys(updates).length) return res.status(400).json({ error: 'No editable wedding fields were provided.' });
   const keys = Object.keys(updates);
@@ -295,10 +366,16 @@ app.get('/api/templates', (_req, res) => res.json({ templates: [
   { name: 'Still & Simple', category: 'Minimal', color: '#8a9291' },
   { name: 'Petal & Pearl', category: 'Romantic', color: '#ca9293' },
   { name: 'Midnight Vows', category: 'Modern', color: '#504a57' },
+  { name: 'Khmer Heritage', category: 'Khmer', color: '#bd9a5d' },
+  { name: 'Angkor Royal', category: 'Khmer', color: '#C8A45D' },
+  { name: 'Khmer Ceremonial', category: 'Khmer', color: '#D4AF37' },
+  { name: 'Khmer Ceremonial Gold', category: 'Khmer', color: '#D4AF37' },
 ] }));
 
 app.get('/api/weddings/:id/guests', auth(), weddingForOwner, (req, res) => {
-  res.json({ guests: db.prepare('SELECT * FROM guests WHERE wedding_id = ? ORDER BY created_at DESC').all(req.wedding.id) });
+  res.json({ guests: db.prepare(`SELECT g.*, r.phone AS rsvp_phone, r.meal_preference, r.message AS rsvp_message
+    FROM guests g LEFT JOIN rsvps r ON r.guest_id = g.id
+    WHERE g.wedding_id = ? ORDER BY g.created_at DESC`).all(req.wedding.id) });
 });
 app.post('/api/weddings/:id/guests', auth(), weddingForOwner, (req, res) => {
   const input = z.object({
@@ -326,13 +403,19 @@ app.put('/api/weddings/:id/guests/:guestId', auth(), weddingForOwner, (req, res)
   res.json({ guest: db.prepare('SELECT * FROM guests WHERE id = ?').get(guest.id) });
 });
 app.delete('/api/weddings/:id/guests/:guestId', auth(), weddingForOwner, (req, res) => {
-  const result = db.prepare('DELETE FROM guests WHERE id = ? AND wedding_id = ?').run(Number(req.params.guestId), req.wedding.id);
-  if (!result.changes) return res.status(404).json({ error: 'Guest not found.' });
+  const guest = db.prepare('SELECT id FROM guests WHERE id = ? AND wedding_id = ?').get(Number(req.params.guestId), req.wedding.id);
+  if (!guest) return res.status(404).json({ error: 'Guest not found.' });
+  db.transaction(() => {
+    db.prepare('DELETE FROM rsvps WHERE guest_id = ?').run(guest.id);
+    db.prepare('DELETE FROM guests WHERE id = ? AND wedding_id = ?').run(guest.id, req.wedding.id);
+  })();
   res.status(204).end();
 });
 app.get('/api/weddings/:id/guests.csv', auth(), weddingForOwner, (req, res) => {
-  const guests = db.prepare('SELECT name,email,phone,category,party_size,rsvp,attendees,checked_in FROM guests WHERE wedding_id = ? ORDER BY name').all(req.wedding.id);
-  const csv = ['name,email,phone,category,party_size,rsvp,attendees,checked_in', ...guests.map((guest) => Object.values(guest).map((value) => {
+  const guests = db.prepare(`SELECT g.name,g.email,g.phone,g.category,g.party_size,g.rsvp,g.attendees,g.checked_in,
+    r.phone AS rsvp_phone,r.meal_preference,r.message AS rsvp_message
+    FROM guests g LEFT JOIN rsvps r ON r.guest_id = g.id WHERE g.wedding_id = ? ORDER BY g.name`).all(req.wedding.id);
+  const csv = ['name,email,phone,category,party_size,rsvp,attendees,checked_in,rsvp_phone,meal_preference,rsvp_message', ...guests.map((guest) => Object.values(guest).map((value) => {
     const content = String(value).replace(/^\s*([=+\-@])/, "'$1");
     return `"${content.replaceAll('"', '""')}"`;
   }).join(','))].join('\r\n');
@@ -391,6 +474,16 @@ app.delete('/api/weddings/:id/media/:mediaId', auth(), weddingForOwner, (req, re
   const filePath = path.join(uploadDir, filename);
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
   db.prepare('UPDATE weddings SET media = ? WHERE id = ?').run(JSON.stringify(media.filter((entry) => entry.id !== item.id)), req.wedding.id);
+  const assignments = ['payment_qr_media_id', 'welcome_video_media_id', 'music_media_id']
+    .filter((field) => req.wedding[field] === item.id)
+    .map((field) => [field, '']);
+  if (item.type === 'image') {
+    const timeline = JSON.parse(req.wedding.love_timeline || '[]');
+    if (timeline.some((milestone) => milestone.photo_media_id === item.id)) {
+      assignments.push(['love_timeline', JSON.stringify(timeline.map((milestone) => milestone.photo_media_id === item.id ? { ...milestone, photo_media_id: '' } : milestone))]);
+    }
+  }
+  if (assignments.length) db.prepare(`UPDATE weddings SET ${assignments.map(([field]) => `${field} = ?`).join(', ')} WHERE id = ?`).run(...assignments.map(([, value]) => value), req.wedding.id);
   res.status(204).end();
 });
 
@@ -427,13 +520,23 @@ app.post('/api/public/:slug/rsvp', (req, res) => {
     name: z.string().trim().min(2).max(120), email: z.string().trim().email().max(254).or(z.literal('')).optional(),
     invitation_token: z.string().regex(/^[a-f0-9]{64}$/i),
     attending: z.boolean(), attendees: z.coerce.number().int().min(0).max(20), message: z.string().max(500).optional(),
+    phone: z.string().trim().max(40).optional().default(''),
+    meal_preference: z.string().trim().max(120).optional().default(''),
   }).parse(req.body);
   const attendees = input.attending ? Math.max(1, input.attendees) : 0;
   const guest = db.prepare('SELECT * FROM guests WHERE wedding_id = ? AND invitation_token = ?').get(wedding.id, input.invitation_token);
   if (!guest || !safeEqual(guest.name.trim().toLocaleLowerCase(), input.name.trim().toLocaleLowerCase())) return res.status(404).json({ error: 'We couldn’t match that name to an invitation. Please contact the couple.' });
   if (attendees > guest.party_size) return res.status(400).json({ error: `This invitation is for up to ${guest.party_size} ${guest.party_size === 1 ? 'guest' : 'guests'}.` });
   const transaction = db.transaction(() => {
-    db.prepare('INSERT INTO rsvps (wedding_id,name,email,attending,attendees,message) VALUES (?,?,?,?,?,?)').run(wedding.id, input.name, input.email || '', Number(input.attending), attendees, input.message || '');
+    db.prepare(`INSERT INTO rsvps (wedding_id,name,email,attending,attendees,message,guest_id,phone,meal_preference)
+      VALUES (?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(guest_id) WHERE guest_id IS NOT NULL DO UPDATE SET
+      name = excluded.name, email = excluded.email, attending = excluded.attending,
+      attendees = excluded.attendees, message = excluded.message, phone = excluded.phone,
+      meal_preference = excluded.meal_preference`).run(
+      wedding.id, input.name, input.email || '', Number(input.attending), attendees, input.message || '',
+      guest.id, input.phone, input.meal_preference,
+    );
     db.prepare('UPDATE guests SET rsvp = ?, attendees = ? WHERE id = ?').run(input.attending ? 'Attending' : 'Declined', attendees, guest.id);
   });
   transaction();
