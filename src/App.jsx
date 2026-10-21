@@ -248,6 +248,7 @@ function StatCard({ icon, label, value, detail, tone }) {
 
 function WeddingEditor({ wedding, onSave, busy }) {
   const [form, setForm] = useState({ ...blankWedding, ...wedding });
+  const formRef = useRef(null);
   useEffect(() => setForm({ ...blankWedding, ...wedding, ceremony_schedule: wedding.ceremony_schedule || [], love_timeline: wedding.love_timeline || [] }), [wedding.id]);
   const update = (field) => (event) => setForm((current) => ({ ...current, [field]: event.target.value }));
   const updateCeremony = (index, field, value) => setForm((current) => ({
@@ -258,20 +259,20 @@ function WeddingEditor({ wedding, onSave, busy }) {
     ...current,
     love_timeline: current.love_timeline.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item),
   }));
-  const submit = async (event) => { event.preventDefault(); await onSave({ ...form, ceremony_schedule: JSON.stringify(form.ceremony_schedule), love_timeline: JSON.stringify(form.love_timeline) }); };
+  const submit = async (event) => { event.preventDefault(); await onSave(form); };
   const isRoyalKhmer = ['Angkor Royal', 'Khmer Ceremonial', 'Khmer Ceremonial Gold'].includes(form.template);
-  return <><PageHeading eyebrow="THE DETAILS THAT MAKE IT YOURS" title="Tell your story." description="The little things your favorite people will want to know." actions={<button className="button button-dark" onClick={submit} disabled={busy}>{busy ? 'Saving…' : 'Save changes'} <span>→</span></button>} />
-    <form className="editor-layout" onSubmit={submit}>
+  return <><PageHeading eyebrow="THE DETAILS THAT MAKE IT YOURS" title="Tell your story." description="The little things your favorite people will want to know." actions={<button className="button button-dark" onClick={() => formRef.current?.requestSubmit()} disabled={busy}>{busy ? 'Saving…' : 'Save changes'} <span>→</span></button>} />
+    <form ref={formRef} className="editor-layout" onSubmit={submit}>
       <div className="panel editor-panel"><div className="editor-section-heading"><span className="editor-number">01</span><div><h3>The two of you</h3><p>Start with the names at the heart of it all.</p></div></div><div className="form-grid"><label>Partner one<input required maxLength="100" placeholder="e.g. Sophie" value={form.bride} onChange={update('bride')} /></label><label>Partner two<input required maxLength="100" placeholder="e.g. James" value={form.groom} onChange={update('groom')} /></label><label className="full-field">A title for your invitation<input maxLength="120" placeholder="Sophie & James — we’re getting married!" value={form.title} onChange={update('title')} /></label></div></div>
       <div className="panel editor-panel"><div className="editor-section-heading"><span className="editor-number">02</span><div><h3>Save the date</h3><p>We promise, this is the one they won’t forget.</p></div></div><div className="form-grid"><label>Wedding date<input type="date" value={form.wedding_date} onChange={update('wedding_date')} /></label><label>Your venue<input maxLength="200" placeholder="e.g. The Rosewood Garden" value={form.venue} onChange={update('venue')} /></label><label className="full-field">Address<textarea rows="2" maxLength="500" placeholder="Street, city, country" value={form.address} onChange={update('address')} /></label><label className="full-field">Google Maps link<input type="url" maxLength="500" placeholder="https://maps.google.com/…" value={form.maps_url} onChange={update('maps_url')} /></label></div></div>
       <div className="panel editor-panel"><div className="editor-section-heading"><span className="editor-number">03</span><div><h3>A little about your love</h3><p>Let the people you love get to know your story.</p></div></div><label>Your story<textarea rows="5" maxLength="5000" placeholder="Tell them about the little moments that brought you here…" value={form.story} onChange={update('story')} /></label><div className="character-count">{form.story.length} / 5,000 characters</div></div>
       {isRoyalKhmer && <>
         <div className="panel editor-panel royal-editor"><div className="editor-section-heading"><span className="editor-number">04</span><div><h3>កម្មវិធីពិធីមង្គលការ</h3><p>បន្ថែម និងកែសម្រួលពិធីតាមប្រពៃណី និងតាមជម្រើសរបស់អ្នក។ ពិធីទាំងអស់ជាគំរូប៉ុណ្ណោះ ហើយអាចលុបបាន។</p></div></div>
-          {form.ceremony_schedule.map((item, index) => <div className="ceremony-editor-row" key={index}><div className="form-grid"><label>ឈ្មោះពិធី<input maxLength="120" value={item.name} onChange={(event) => updateCeremony(index, 'name', event.target.value)} /></label><label>កាលបរិច្ឆេទ<input type="date" value={item.date} onChange={(event) => updateCeremony(index, 'date', event.target.value)} /></label><label>ម៉ោង<input type="time" value={item.time} onChange={(event) => updateCeremony(index, 'time', event.target.value)} /></label><label>ទីតាំង<input maxLength="200" value={item.location} onChange={(event) => updateCeremony(index, 'location', event.target.value)} /></label><label className="full-field">សេចក្តីពិពណ៌នា<textarea rows="2" maxLength="500" value={item.description} onChange={(event) => updateCeremony(index, 'description', event.target.value)} /></label></div><button type="button" className="row-delete ceremony-remove" aria-label={`លុបពិធី ${item.name}`} onClick={() => setForm((current) => ({ ...current, ceremony_schedule: current.ceremony_schedule.filter((_, itemIndex) => itemIndex !== index) }))}>លុបពិធី ×</button></div>)}
+          {form.ceremony_schedule.map((item, index) => <div className="ceremony-editor-row" key={index}><div className="form-grid"><label>ឈ្មោះពិធី<input required maxLength="120" value={item.name} onChange={(event) => updateCeremony(index, 'name', event.target.value)} /></label><label>កាលបរិច្ឆេទ<input type="date" value={item.date} onChange={(event) => updateCeremony(index, 'date', event.target.value)} /></label><label>ម៉ោង<input type="time" value={item.time} onChange={(event) => updateCeremony(index, 'time', event.target.value)} /></label><label>ទីតាំង<input maxLength="200" value={item.location} onChange={(event) => updateCeremony(index, 'location', event.target.value)} /></label><label className="full-field">សេចក្តីពិពណ៌នា<textarea rows="2" maxLength="500" value={item.description} onChange={(event) => updateCeremony(index, 'description', event.target.value)} /></label></div><button type="button" className="row-delete ceremony-remove" aria-label={`លុបពិធី ${item.name}`} onClick={() => setForm((current) => ({ ...current, ceremony_schedule: current.ceremony_schedule.filter((_, itemIndex) => itemIndex !== index) }))}>លុបពិធី ×</button></div>)}
           <div className="ceremony-editor-actions"><button type="button" className="button button-outline" disabled={form.ceremony_schedule.length >= 20} onClick={() => setForm((current) => ({ ...current, ceremony_schedule: [...current.ceremony_schedule, { name: '', date: '', time: '', description: '', location: '' }] }))}>＋ បន្ថែមពិធី</button>{form.ceremony_schedule.length === 0 && <button type="button" className="text-link" onClick={() => setForm((current) => ({ ...current, ceremony_schedule: sampleCeremonies.map((item) => ({ ...item })) }))}>បន្ថែមកម្មវិធីគំរូ (អាចកែ ឬលុបបាន)</button>}</div>
         </div>
         <div className="panel editor-panel royal-editor"><div className="editor-section-heading"><span className="editor-number">04b</span><div><h3>អនុស្សាវរីយ៍នៃស្នេហា</h3><p>បន្ថែមកាលបរិច្ឆេទ រឿងខ្លីៗ និងរូបថតសំខាន់ៗសម្រាប់ timeline។</p></div></div>
-          {form.love_timeline.map((item, index) => <div className="ceremony-editor-row" key={index}><div className="form-grid"><label>ចំណងជើង<input maxLength="120" value={item.title} onChange={(event) => updateMilestone(index, 'title', event.target.value)} /></label><label>កាលបរិច្ឆេទ<input type="date" value={item.date} onChange={(event) => updateMilestone(index, 'date', event.target.value)} /></label><label className="full-field">រឿងរ៉ាវខ្លី<textarea rows="2" maxLength="500" value={item.description} onChange={(event) => updateMilestone(index, 'description', event.target.value)} /></label><label className="full-field">រូបថត<select value={item.photo_media_id} onChange={(event) => updateMilestone(index, 'photo_media_id', event.target.value)}><option value="">មិនជ្រើសរើសរូបថត</option>{(wedding.media || []).filter((media) => media.type === 'image').map((media) => <option key={media.id} value={media.id}>{media.name}</option>)}</select></label></div><button type="button" className="row-delete ceremony-remove" onClick={() => setForm((current) => ({ ...current, love_timeline: current.love_timeline.filter((_, itemIndex) => itemIndex !== index) }))}>លុបអនុស្សាវរីយ៍ ×</button></div>)}
+          {form.love_timeline.map((item, index) => <div className="ceremony-editor-row" key={index}><div className="form-grid"><label>ចំណងជើង<input required maxLength="120" value={item.title} onChange={(event) => updateMilestone(index, 'title', event.target.value)} /></label><label>កាលបរិច្ឆេទ<input type="date" value={item.date} onChange={(event) => updateMilestone(index, 'date', event.target.value)} /></label><label className="full-field">រឿងរ៉ាវខ្លី<textarea rows="2" maxLength="500" value={item.description} onChange={(event) => updateMilestone(index, 'description', event.target.value)} /></label><label className="full-field">រូបថត<select value={item.photo_media_id} onChange={(event) => updateMilestone(index, 'photo_media_id', event.target.value)}><option value="">មិនជ្រើសរើសរូបថត</option>{(wedding.media || []).filter((media) => media.type === 'image').map((media) => <option key={media.id} value={media.id}>{media.name}</option>)}</select></label></div><button type="button" className="row-delete ceremony-remove" onClick={() => setForm((current) => ({ ...current, love_timeline: current.love_timeline.filter((_, itemIndex) => itemIndex !== index) }))}>លុបអនុស្សាវរីយ៍ ×</button></div>)}
           <div className="ceremony-editor-actions"><button type="button" className="button button-outline" disabled={form.love_timeline.length >= 20} onClick={() => setForm((current) => ({ ...current, love_timeline: [...current.love_timeline, { title: '', date: '', description: '', photo_media_id: '' }] }))}>＋ បន្ថែមអនុស្សាវរីយ៍</button></div>
         </div>
         <div className="panel editor-panel royal-editor"><div className="editor-section-heading"><span className="editor-number">05</span><div><h3>ទីតាំង ការទំនាក់ទំនង និងអំណោយ</h3><p>ព័ត៌មានទាំងនេះជាជម្រើស អ្នកអាចទុកចោលដើម្បីរក្សាភាពឯកជន។</p></div></div><div className="form-grid">
@@ -357,14 +358,41 @@ function TemplateStudio({ wedding, onApply }) {
 function MediaStudio({ wedding, token, onChange, onSave, onToast }) {
   const inputRef = useRef(null);
   const [busy, setBusy] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState('');
   const [error, setError] = useState('');
   const media = wedding.media || [];
-  async function upload(file) {
-    if (!file) return;
-    const form = new FormData(); form.append('file', file);
+  async function upload(files) {
+    const selectedFiles = Array.from(files || []);
+    if (!selectedFiles.length || busy) return;
     setBusy(true); setError('');
-    try { await api(`/weddings/${wedding.id}/media`, { token, method: 'POST', body: form }); await onChange(); onToast('Your memory was added to the collection.'); }
-    catch (cause) { setError(cause.message); } finally { setBusy(false); if (inputRef.current) inputRef.current.value = ''; }
+    let uploaded = 0;
+    const failures = [];
+    try {
+      for (const [index, file] of selectedFiles.entries()) {
+        setUploadStatus(`Adding ${index + 1} of ${selectedFiles.length} memories…`);
+        const form = new FormData();
+        form.append('file', file);
+        try {
+          await api(`/weddings/${wedding.id}/media`, { token, method: 'POST', body: form });
+          uploaded += 1;
+        } catch (cause) {
+          failures.push(`${file.name}: ${cause.message}`);
+        }
+      }
+      if (uploaded) {
+        await onChange();
+        onToast(`${uploaded} ${uploaded === 1 ? 'memory was' : 'memories were'} added to the collection.`);
+      }
+      if (failures.length) {
+        setError(`${uploaded} of ${selectedFiles.length} files uploaded. ${failures.join(' ')}`);
+      }
+    } catch (cause) {
+      setError(cause.message);
+    } finally {
+      setBusy(false);
+      setUploadStatus('');
+      if (inputRef.current) inputRef.current.value = '';
+    }
   }
   async function remove(item) {
     if (!window.confirm(`Remove ${item.name} from your collection?`)) return;
@@ -374,8 +402,8 @@ function MediaStudio({ wedding, token, onChange, onSave, onToast }) {
     try { await onSave({ [field]: value }); }
     catch (cause) { setError(cause.message); }
   };
-  return <><PageHeading eyebrow="THE MOMENTS YOU WANT TO KEEP" title="Little memories, gathered." description="A home for the photographs, sounds and moving pictures that tell your story." actions={<><button className="button button-outline" onClick={() => inputRef.current?.click()}>＋ &nbsp; Add media</button><input ref={inputRef} hidden type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,audio/mpeg,audio/ogg,audio/mp4" onChange={(event) => upload(event.target.files?.[0])} /></>} />
-    <div className="upload-dropzone" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); upload(event.dataTransfer.files?.[0]); }}><div className="upload-icon">↑</div><strong>{busy ? 'Tucking your memory in safely…' : 'Drop something lovely right here'}</strong><span>Photos, films and music · JPEG, PNG, WebP, MP4, MP3 · up to 25 MB each</span><button className="text-link" onClick={() => inputRef.current?.click()}>Choose a file from your device →</button></div>
+  return <><PageHeading eyebrow="THE MOMENTS YOU WANT TO KEEP" title="Little memories, gathered." description="A home for the photographs, sounds and moving pictures that tell your story." actions={<><button className="button button-outline" onClick={() => inputRef.current?.click()} disabled={busy}>＋ &nbsp; Add media</button><input ref={inputRef} hidden type="file" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,audio/mpeg,audio/ogg,audio/mp4" onChange={(event) => upload(event.target.files)} /></>} />
+    <div className="upload-dropzone" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); upload(event.dataTransfer.files); }}><div className="upload-icon">↑</div><strong>{busy ? uploadStatus : 'Drop something lovely right here'}</strong><span>Photos, films and music · JPEG, PNG, WebP, MP4, MP3 · up to 25 MB each</span><button className="text-link" disabled={busy} onClick={() => inputRef.current?.click()}>Choose files from your device →</button></div>
     {error && <div className="error-banner">{error}<button onClick={() => setError('')}>×</button></div>}
     <section className="panel media-roles"><div><span className="eyebrow">MAKE IT YOURS</span><h3>Invitation extras</h3><p>Choose uploaded files to play before the invitation, play as background music, or show as your payment QR.</p></div><div className="media-role-grid">
       <label>Welcome video<select value={wedding.welcome_video_media_id || ''} onChange={(event) => assignMedia('welcome_video_media_id', event.target.value)}><option value="">No welcome video</option>{media.filter((item) => item.type === 'video').map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select><small>Plays muted before the welcome page; guests can skip.</small></label>
@@ -929,7 +957,7 @@ function KhmerCeremonialGoldInvitation({ wedding, invitedGuest, preview, form, s
       <div className="cg-door cg-door-right" />
       <div className="cg-entry-card cg-frame"><span className="cg-entry-mark">❋</span><p>{text.wedding}</p><h1>{wedding.bride}<br /><i>&amp;</i><br />{wedding.groom}</h1>{dateLabel && 
       <time>{dateLabel}</time>}
-      <br />{venue && <span className="cg-entry-venue">{venue}</span>}
+      <br />
       <button type="button" className="cg-button" onClick={openEntry}>{text.open} <span>→</span></button></div>
     </div>}
     <nav className="cg-nav">

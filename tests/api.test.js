@@ -75,6 +75,16 @@ test('accounts are isolated and wedding publishing and RSVP work end to end', as
   assert.equal(wedding.payment_qr_media_id, '');
   assert.deepEqual(wedding.ceremony_schedule, []);
   assert.deepEqual(wedding.love_timeline, []);
+  const nativeScheduleUpdate = await request(`/api/weddings/${wedding.id}`, {
+    token: ownerToken, method: 'PUT',
+    body: {
+      ceremony_schedule: [{ name: 'Ceremony', time: '10:00' }],
+      love_timeline: [{ title: 'Our first date', date: '2020-02-14' }],
+    },
+  });
+  assert.equal(nativeScheduleUpdate.status, 200);
+  assert.deepEqual(nativeScheduleUpdate.data.wedding.ceremony_schedule, [{ name: 'Ceremony', date: '', time: '10:00', description: '', location: '' }]);
+  assert.deepEqual(nativeScheduleUpdate.data.wedding.love_timeline, [{ title: 'Our first date', date: '2020-02-14', description: '', photo_media_id: '' }]);
   const templates = await request('/api/templates');
   assert.ok(templates.data.templates.some((template) => template.name === 'Khmer Heritage' && template.category === 'Khmer'));
   assert.ok(templates.data.templates.some((template) => template.name === 'Angkor Royal' && template.category === 'Khmer'));
@@ -110,6 +120,9 @@ test('accounts are isolated and wedding publishing and RSVP work end to end', as
   })).status, 200);
   assert.equal((await request(`/api/weddings/${wedding.id}`, {
     token: ownerToken, method: 'PUT', body: { ceremony_schedule: 'not valid json' },
+  })).status, 400);
+  assert.equal((await request(`/api/weddings/${wedding.id}`, {
+    token: ownerToken, method: 'PUT', body: { ceremony_schedule: JSON.stringify([{ name: '' }]) },
   })).status, 400);
   assert.equal((await request(`/api/weddings/${wedding.id}/media/${uploadedImage.data.media.id}`, { token: ownerToken, method: 'DELETE' })).status, 204);
   const afterImageRemoval = await request(`/api/weddings/${wedding.id}`, { token: ownerToken });

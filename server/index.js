@@ -339,9 +339,12 @@ app.put('/api/weddings/:id', auth(), weddingForOwner, (req, res) => {
   const updates = {};
   for (const field of weddingFields) {
     if (!Object.hasOwn(req.body, field)) continue;
-    const maxLength = field === 'story' || field === 'gift_payment_info' ? 5000 : ['ceremony_schedule', 'love_timeline'].includes(field) ? 12000 : 500;
-    const value = z.string().trim().max(maxLength).parse(req.body[field]);
-    if (field === 'ceremony_schedule' || field === 'love_timeline') {
+    const isScheduleField = field === 'ceremony_schedule' || field === 'love_timeline';
+    const maxLength = field === 'story' || field === 'gift_payment_info' ? 5000 : isScheduleField ? 12000 : 500;
+    const value = isScheduleField && Array.isArray(req.body[field])
+      ? z.string().max(maxLength).parse(JSON.stringify(req.body[field]))
+      : z.string().trim().max(maxLength).parse(req.body[field]);
+    if (isScheduleField) {
       let schedule;
       try { schedule = JSON.parse(value); } catch { throw new z.ZodError([{ code: 'custom', path: [field], message: `${field === 'ceremony_schedule' ? 'Ceremony schedule' : 'Love timeline'} must be valid JSON.` }]); }
       const parsedSchedule = (field === 'ceremony_schedule' ? ceremonyScheduleSchema : loveTimelineSchema).parse(schedule);
